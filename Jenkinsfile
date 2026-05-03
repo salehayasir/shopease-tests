@@ -3,8 +3,8 @@ pipeline {
 
     environment {
         // ── Change these two values to match your setup ──────────────────
-        APP_URL      = "http://<YOUR_EC2_PUBLIC_IP>:8000"   // ShopEase live URL
-        TEST_REPO    = "https://github.com/<your-username>/shopease-tests.git"
+        APP_URL      = "http://65.0.74.194:3000"   // ShopEase live URL
+        TEST_REPO    = "https://github.com/salehayasir/shopease-tests.git"
         // ─────────────────────────────────────────────────────────────────
         IMAGE_NAME   = "shopease-selenium-tests"
         RESULTS_DIR  = "${WORKSPACE}/test-results"
