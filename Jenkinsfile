@@ -2,11 +2,9 @@ pipeline {
     agent any
 
     environment {
-        // ── Update if needed ─────────────────────────────
         APP_URL     = "http://65.0.74.194:3000"
         IMAGE_NAME  = "shopease-selenium-tests"
         RESULTS_DIR = "${WORKSPACE}/test-results"
-        // ─────────────────────────────────────────────────
     }
 
     triggers {
@@ -34,12 +32,13 @@ pipeline {
                 echo "Running Selenium tests against ${APP_URL} ..."
 
                 sh """
-                    mkdir -p ${RESULTS_DIR}
+                    rm -rf test-results
+                    mkdir -p test-results
 
                     docker run --rm \
                         --name shopease-tests-${BUILD_NUMBER} \
                         -e BASE_URL=${APP_URL} \
-                        -v ${RESULTS_DIR}:/app/test-results \
+                        -v ${WORKSPACE}/test-results:/app/test-results \
                         ${IMAGE_NAME}:${BUILD_NUMBER}
                 """
             }
@@ -47,8 +46,13 @@ pipeline {
 
         stage('Publish Results') {
             steps {
-                junit allowEmptyResults: true,
-                      testResults: 'test-results/results.xml'
+                script {
+                    echo "Checking test results..."
+                    sh "ls -R test-results || true"
+
+                    junit allowEmptyResults: true,
+                          testResults: '**/test-results/*.xml'
+                }
             }
         }
 
