@@ -40,12 +40,11 @@ pipeline {
 			}
 		}
         stage('Publish Results') {
-            steps {
-                echo "Publishing test results..."
-                junit allowEmptyResults: true,
-                      testResults: 'test-results/results.xml'
-            }
-        }
+			steps {
+				echo "Publishing test results..."
+				junit testResults: 'test-results/*.xml', allowEmptyResults: false
+			}
+		}
         stage('Cleanup Docker Image') {
             steps {
                 sh "docker rmi ${IMAGE_NAME}:${BUILD_NUMBER} || true"
