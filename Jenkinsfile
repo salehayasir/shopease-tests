@@ -42,7 +42,7 @@ pipeline {
         stage('Publish Results') {
 			steps {
 				echo "Publishing test results..."
-				junit testResults: 'test-results/*.xml', allowEmptyResults: false
+				junit allowEmptyResults: false, testResults: '**/results.xml'
 			}
 		}
         stage('Cleanup Docker Image') {
