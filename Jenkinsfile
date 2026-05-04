@@ -28,15 +28,22 @@ pipeline {
         }
 
         // 🔥 NEW REQUIRED STAGE (THIS IS WHAT YOUR PROFESSOR WANTS)
-        stage('Deploy App') {
+		stage('Deploy App') {
 			steps {
 				sh """
+					# Clean old container
 					docker stop shopease-app || true
 					docker rm shopease-app || true
 
-					cd ../shopease-app || exit 1
-					docker build -t shopease-app .
+					# Clone app repo
+					if [ ! -d "shopease" ]; then
+						git clone https://github.com/salehayasir/shopease.git
+					fi
 
+					cd shopease
+
+					# Build and run app
+					docker build -t shopease-app .
 					docker run -d -p 3000:3000 --name shopease-app shopease-app
 				"""
 			}
