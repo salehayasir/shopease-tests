@@ -13,55 +13,80 @@ pipeline {
 
     stages {
 
-        stage('Checkout Code') {
+        stage('Checkout Test Repo') {
             steps {
-                echo "Using Jenkins auto checkout (SCM)..."
+                echo "Checking out Selenium test repo..."
                 checkout scm
             }
         }
 
-        stage('Build Docker Image (Tests)') {
+        stage('Build Test Docker Image') {
             steps {
                 echo "Building test Docker image..."
                 sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
             }
         }
 
-        // 🔥 NEW REQUIRED STAGE (THIS IS WHAT YOUR PROFESSOR WANTS)
-		stage('Deploy App') {
-			steps {
-				sh """
-					# Clean old container
-					docker stop shopease-app || true
-					docker rm shopease-app || true
+        stage('Prepare App Source') {
+            steps {
+                echo "Cloning application repo..."
+                sh """
+                    rm -rf shopease
+                    git clone https://github.com/salehayasir/shopease.git
+                """
+            }
+        }
 
-					# Clone app repo
-					if [ ! -d "shopease" ]; then
-						git clone https://github.com/salehayasir/shopease.git
-					fi
+        stage('Build App Docker Image') {
+            steps {
+                echo "Building app image..."
+                sh """
+                    cd shopease
+                    docker build -t ${APP_IMAGE}:${BUILD_NUMBER} .
+                """
+            }
+        }
 
-					cd shopease
+        stage('Run App Container') {
+            steps {
+                echo "Starting app container..."
+                sh """
+                    docker stop shopease-app || true
+                    docker rm shopease-app || true
+                    docker run -d \
+                        -p 3000:3000 \
+                        --name shopease-app \
+                        ${APP_IMAGE}:${BUILD_NUMBER}
+                """
+            }
+        }
 
-					# Build and run app
-					docker build -t shopease-app .
-					docker run -d -p 3000:3000 --name shopease-app shopease-app
-				"""
-			}
-		}
+        stage('Wait for App') {
+            steps {
+                echo "Waiting for app to become ready..."
+                sh """
+                    for i in \$(seq 1 25); do
+                        curl -f http://65.0.74.194:3000 && echo "App is up!" && exit 0
+                        echo "Waiting..."
+                        sleep 3
+                    done
+                    echo "App failed to start"
+                    exit 1
+                """
+            }
+        }
 
         stage('Run Selenium Tests') {
             steps {
-                echo "Running Selenium tests against ${APP_URL} ..."
+                echo "Running Selenium tests..."
                 sh """
                     rm -rf ${WORKSPACE}/test-results
                     mkdir -p ${WORKSPACE}/test-results
-
                     docker run --rm \
-                        --name shopease-tests-${BUILD_NUMBER} \
-                        -v ${WORKSPACE}/test-results:/app/test-results \
+                        --volumes-from jenkins \
                         -e BASE_URL=${APP_URL} \
                         ${IMAGE_NAME}:${BUILD_NUMBER} \
-                        pytest tests/ -v --junit-xml=/app/test-results/results.xml
+                        pytest tests/ -v --junit-xml=${WORKSPACE}/test-results/results.xml
                 """
             }
         }
@@ -74,11 +99,13 @@ pipeline {
             }
         }
 
-        stage('Cleanup Docker Images') {
+        stage('Cleanup') {
             steps {
                 sh """
+                    docker stop shopease-app || true
+                    docker rm shopease-app || true
                     docker rmi ${IMAGE_NAME}:${BUILD_NUMBER} || true
-                    docker rmi ${APP_IMAGE} || true
+                    docker rmi ${APP_IMAGE}:${BUILD_NUMBER} || true
                 """
             }
         }
@@ -89,27 +116,19 @@ pipeline {
             script {
                 def statusColor = currentBuild.result == 'SUCCESS' ? '#16a34a' : '#dc2626'
                 def statusEmoji = currentBuild.result == 'SUCCESS' ? '✅' : '❌'
-
                 emailext(
                     subject: "${statusEmoji} ShopEase Tests — ${currentBuild.result} [Build #${BUILD_NUMBER}]",
                     mimeType: 'text/html',
                     to: 'qasimalik@gmail.com',
                     body: """
-                        <div style="font-family:Arial,sans-serif;max-width:600px;">
+                        <div style="font-family:Arial;">
                           <h2 style="color:${statusColor};">
-                            ${statusEmoji} ShopEase CI/CD Test Report
+                            ${statusEmoji} ShopEase CI/CD Report
                           </h2>
-
-                          <p><b>Job:</b> ${env.JOB_NAME}</p>
                           <p><b>Build:</b> #${BUILD_NUMBER}</p>
                           <p><b>Status:</b> ${currentBuild.result}</p>
-                          <p><b>App URL:</b> <a href="${APP_URL}">${APP_URL}</a></p>
+                          <p><b>App:</b> ${APP_URL}</p>
                           <p><b>Duration:</b> ${currentBuild.durationString}</p>
-
-                          <hr>
-                          <p style="color:#6b7280;font-size:12px;">
-                            Automated report from Jenkins CI/CD pipeline.
-                          </p>
                         </div>
                     """,
                     recipientProviders: [
