@@ -29,18 +29,18 @@ pipeline {
 
         // 🔥 NEW REQUIRED STAGE (THIS IS WHAT YOUR PROFESSOR WANTS)
         stage('Deploy App') {
-            steps {
-                echo "Deploying application container..."
-                sh """
-                    docker stop shopease-app || true
-                    docker rm shopease-app || true
+			steps {
+				sh """
+					docker stop shopease-app || true
+					docker rm shopease-app || true
 
-                    docker build -t ${APP_IMAGE} .
+					cd ../shopease-app || exit 1
+					docker build -t shopease-app .
 
-                    docker run -d -p 3000:3000 --name shopease-app ${APP_IMAGE}
-                """
-            }
-        }
+					docker run -d -p 3000:3000 --name shopease-app shopease-app
+				"""
+			}
+		}
 
         stage('Run Selenium Tests') {
             steps {
