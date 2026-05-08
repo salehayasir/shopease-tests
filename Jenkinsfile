@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        BASE_URL = "http://13.201.46.240:3000"
+        BASE_URL = "http://localhost:3000"
         IMAGE_NAME = "shopease-tests"
     }
 
@@ -33,6 +33,7 @@ pipeline {
                 sh """
                     mkdir -p \$(pwd)/reports
                     docker run --rm \
+                        --network=host \
                         -e BASE_URL=${BASE_URL} \
                         -v \$(pwd)/reports:/app/reports \
                         ${IMAGE_NAME} \
