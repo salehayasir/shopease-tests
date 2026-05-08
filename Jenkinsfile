@@ -2,9 +2,8 @@ pipeline {
     agent any
 
     environment {
-        APP_URL    = "http://65.0.74.194:3000"
-        IMAGE_NAME = "shopease-selenium-tests"
-        APP_IMAGE  = "shopease-app"
+        BASE_URL = "http://13.201.46.240:3000"
+        IMAGE_NAME = "shopease-tests"
     }
 
     triggers {
@@ -13,100 +12,47 @@ pipeline {
 
     stages {
 
-        stage('Checkout Test Repo') {
+        stage('Checkout') {
             steps {
-                echo "Checking out Selenium test repo..."
-                checkout scm
+                echo "Cloning test repository..."
+                git branch: 'main',
+                    url: 'https://github.com/salehayasir/shopease-tests.git'
             }
         }
 
-        stage('Build Test Docker Image') {
+        stage('Build Test Image') {
             steps {
-                echo "Building test Docker image..."
-                sh "docker build -t ${IMAGE_NAME}:${BUILD_NUMBER} ."
+                echo "Building Docker image for Selenium tests..."
+                sh "docker build -t ${IMAGE_NAME} ."
             }
         }
 
-        stage('Prepare App Source') {
+        stage('Test') {
             steps {
-                echo "Cloning application repo..."
+                echo "Running Selenium test cases..."
                 sh """
-                    rm -rf shopease
-                    git clone https://github.com/salehayasir/shopease.git
-                """
-            }
-        }
-
-        stage('Build App Docker Image') {
-            steps {
-                echo "Building app image..."
-                sh """
-                    cd shopease
-                    docker build -t ${APP_IMAGE}:${BUILD_NUMBER} .
-                """
-            }
-        }
-
-        stage('Run App Container') {
-            steps {
-                echo "Starting app container..."
-                sh """
-                    docker stop shopease-app || true
-                    docker rm shopease-app || true
-                    docker run -d \
-                        -p 3000:3000 \
-                        --name shopease-app \
-                        ${APP_IMAGE}:${BUILD_NUMBER}
-                """
-            }
-        }
-
-        stage('Wait for App') {
-            steps {
-                echo "Waiting for app to become ready..."
-                sh """
-                    for i in \$(seq 1 25); do
-                        curl -f http://65.0.74.194:3000 && echo "App is up!" && exit 0
-                        echo "Waiting..."
-                        sleep 3
-                    done
-                    echo "App failed to start"
-                    exit 1
-                """
-            }
-        }
-
-        stage('Run Selenium Tests') {
-            steps {
-                echo "Running Selenium tests..."
-                sh """
-                    rm -rf ${WORKSPACE}/test-results
-                    mkdir -p ${WORKSPACE}/test-results
                     docker run --rm \
-                        --volumes-from jenkins \
-                        -e BASE_URL=${APP_URL} \
-                        ${IMAGE_NAME}:${BUILD_NUMBER} \
-                        pytest tests/ -v --junit-xml=${WORKSPACE}/test-results/results.xml
+                        -e BASE_URL=${BASE_URL} \
+                        -v \$(pwd)/reports:/app/reports \
+                        ${IMAGE_NAME} \
+                        pytest test_shopease.py \
+                            --html=reports/report.html \
+                            --self-contained-html \
+                            -v
                 """
             }
-        }
-
-        stage('Publish Results') {
-            steps {
-                echo "Publishing test results..."
-                junit allowEmptyResults: false,
-                      testResults: 'test-results/results.xml'
-            }
-        }
-
-        stage('Cleanup') {
-            steps {
-                sh """
-                    docker stop shopease-app || true
-                    docker rm shopease-app || true
-                    docker rmi ${IMAGE_NAME}:${BUILD_NUMBER} || true
-                    docker rmi ${APP_IMAGE}:${BUILD_NUMBER} || true
-                """
+            post {
+                always {
+                    // Archive the HTML report as a Jenkins artifact
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'reports',
+                        reportFiles: 'report.html',
+                        reportName: 'Selenium Test Report'
+                    ])
+                }
             }
         }
     }
@@ -114,26 +60,61 @@ pipeline {
     post {
         always {
             script {
-                def statusColor = currentBuild.result == 'SUCCESS' ? '#16a34a' : '#dc2626'
-                def statusEmoji = currentBuild.result == 'SUCCESS' ? '✅' : '❌'
+                // Get the email of whoever triggered the push
+                def pusherEmail = ''
+                try {
+                    pusherEmail = env.GIT_AUTHOR_EMAIL ?: sh(
+                        script: "git log -1 --format='%ae'",
+                        returnStdout: true
+                    ).trim()
+                } catch (Exception e) {
+                    pusherEmail = 'qasimalik@gmail.com'
+                }
+
+                def buildStatus = currentBuild.currentResult ?: 'UNKNOWN'
+                def statusEmoji = buildStatus == 'SUCCESS' ? '✅' : '❌'
+
                 emailext(
-                    subject: "${statusEmoji} ShopEase Tests — ${currentBuild.result} [Build #${BUILD_NUMBER}]",
-                    mimeType: 'text/html',
-                    to: 'qasimalik@gmail.com',
+                    to: "${pusherEmail}",
+                    subject: "${statusEmoji} ShopEase Test Results — Build #${BUILD_NUMBER} — ${buildStatus}",
                     body: """
-                        <div style="font-family:Arial;">
-                          <h2 style="color:${statusColor};">
-                            ${statusEmoji} ShopEase CI/CD Report
-                          </h2>
-                          <p><b>Build:</b> #${BUILD_NUMBER}</p>
-                          <p><b>Status:</b> ${currentBuild.result}</p>
-                          <p><b>App:</b> ${APP_URL}</p>
-                          <p><b>Duration:</b> ${currentBuild.durationString}</p>
-                        </div>
+<html>
+<body style="font-family: Arial, sans-serif; padding: 20px;">
+    <h2>${statusEmoji} ShopEase Selenium Test Results</h2>
+    <table style="border-collapse: collapse; width: 100%;">
+        <tr>
+            <td style="padding: 8px; font-weight: bold;">Build Number:</td>
+            <td style="padding: 8px;">#${BUILD_NUMBER}</td>
+        </tr>
+        <tr style="background:#f2f2f2;">
+            <td style="padding: 8px; font-weight: bold;">Status:</td>
+            <td style="padding: 8px;"><strong>${buildStatus}</strong></td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; font-weight: bold;">Branch:</td>
+            <td style="padding: 8px;">${GIT_BRANCH ?: 'main'}</td>
+        </tr>
+        <tr style="background:#f2f2f2;">
+            <td style="padding: 8px; font-weight: bold;">Commit:</td>
+            <td style="padding: 8px;">${GIT_COMMIT?.take(8) ?: 'N/A'}</td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; font-weight: bold;">Duration:</td>
+            <td style="padding: 8px;">${currentBuild.durationString}</td>
+        </tr>
+        <tr style="background:#f2f2f2;">
+            <td style="padding: 8px; font-weight: bold;">Jenkins URL:</td>
+            <td style="padding: 8px;"><a href="${BUILD_URL}">${BUILD_URL}</a></td>
+        </tr>
+    </table>
+    <br/>
+    <p>📄 Full test report: <a href="${BUILD_URL}Selenium_20Test_20Report/">${BUILD_URL}Selenium_20Test_20Report/</a></p>
+    <p style="color: gray; font-size: 12px;">This email was sent automatically by Jenkins CI for ShopEase.</p>
+</body>
+</html>
                     """,
-                    recipientProviders: [
-                        [$class: 'RequesterRecipientProvider']
-                    ]
+                    mimeType: 'text/html',
+                    attachmentsPattern: 'reports/report.html'
                 )
             }
         }
