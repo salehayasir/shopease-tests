@@ -31,15 +31,8 @@ RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearm
     && rm -rf /var/lib/apt/lists/*
 
 RUN CHROME_VERSION=$(google-chrome --version | grep -oP '\d+' | head -1) \
-    && curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" \
-    | python3 -c "
-import json,sys
-data=json.load(sys.stdin)
-versions=[v for v in data['versions'] if v['version'].startswith('$CHROME_VERSION.')]
-v=versions[-1]
-url=[d['url'] for d in v['downloads'].get('chromedriver',[]) if d['platform']=='linux64'][0]
-print(url)
-" | xargs wget -O /tmp/chromedriver.zip \
+    && CHROMEDRIVER_URL=$(curl -s "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json" | python3 -c "import json,sys; data=json.load(sys.stdin); versions=[v for v in data['versions'] if v['version'].split('.')[0]=='${CHROME_VERSION}']; url=[d['url'] for d in versions[-1]['downloads']['chromedriver'] if d['platform']=='linux64'][0]; print(url)") \
+    && wget -O /tmp/chromedriver.zip "$CHROMEDRIVER_URL" \
     && unzip /tmp/chromedriver.zip -d /tmp/ \
     && find /tmp -name "chromedriver" -exec mv {} /usr/local/bin/chromedriver \; \
     && chmod +x /usr/local/bin/chromedriver \
