@@ -55,13 +55,17 @@ def logged_in_driver():
     except Exception:
         pass  # account already exists — that's fine
 
-    # Step 2 — always navigate to login page explicitly and wait for it
+    # Step 2 — logout first in case registration auto-logged in
+    d.get(f"{BASE_URL}/auth/logout")
+    time.sleep(1)
+
+    # Step 3 — always navigate to login page explicitly and wait for it
     d.get(f"{BASE_URL}/auth/login")
     WebDriverWait(d, 10).until(
         EC.presence_of_element_located((By.NAME, "email"))
     )
 
-    # Step 3 — fill in and submit login form
+    # Step 4 — fill in and submit login form
     email_field = d.find_element(By.NAME, "email")
     email_field.clear()
     email_field.send_keys(TEST_EMAIL)
@@ -162,7 +166,6 @@ def test_10_category_filter(driver):
     assert len(cards) > 0, "Electronics category should have products"
     cats = driver.find_elements(By.CLASS_NAME, "product-category")
     for cat in cats:
-        # FIX: compare case-insensitively because app renders in ALL CAPS
         assert KNOWN_CATEGORY.lower() in cat.text.lower(), \
             f"Expected '{KNOWN_CATEGORY}' in category label, got: '{cat.text}'"
 
@@ -236,7 +239,6 @@ def test_17_cart_shows_total(logged_in_driver):
 
 # ── TC18  Checkout empties cart and shows success ─────────────────────────
 def test_18_checkout_success(logged_in_driver):
-    # Ensure something is in cart first
     logged_in_driver.get(f"{BASE_URL}/products/{KNOWN_SLUG}")
     WebDriverWait(logged_in_driver, 8).until(
         EC.presence_of_element_located((By.CSS_SELECTOR, ".add-to-cart-form button[type='submit']"))
