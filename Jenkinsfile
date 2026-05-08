@@ -4,6 +4,7 @@ pipeline {
     environment {
         BASE_URL = "http://localhost:3000"
         IMAGE_NAME = "shopease-tests"
+        APP_DIR = "/home/ubuntu/shopease"
     }
 
     triggers {
@@ -17,6 +18,20 @@ pipeline {
                 echo "Cloning test repository..."
                 git branch: 'main',
                     url: 'https://github.com/salehayasir/shopease-tests.git'
+            }
+        }
+
+        stage('Deploy ShopEase App') {
+            steps {
+                echo "Pulling latest app code and bringing up ShopEase..."
+                sh """
+                    cd ${APP_DIR}
+                    git pull origin main
+                    docker-compose down
+                    docker-compose up -d --build
+                    echo "Waiting for app to be ready..."
+                    sleep 15
+                """
             }
         }
 
@@ -61,7 +76,6 @@ pipeline {
     post {
         always {
             script {
-                // Get the email of whoever triggered the push
                 def pusherEmail = ''
                 try {
                     pusherEmail = env.GIT_AUTHOR_EMAIL ?: sh(
@@ -106,6 +120,10 @@ pipeline {
         <tr style="background:#f2f2f2;">
             <td style="padding: 8px; font-weight: bold;">Jenkins URL:</td>
             <td style="padding: 8px;"><a href="${BUILD_URL}">${BUILD_URL}</a></td>
+        </tr>
+        <tr>
+            <td style="padding: 8px; font-weight: bold;">Deployment URL:</td>
+            <td style="padding: 8px;"><a href="http://13.201.46.240:3000">http://13.201.46.240:3000</a></td>
         </tr>
     </table>
     <br/>
