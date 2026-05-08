@@ -31,11 +31,12 @@ pipeline {
             steps {
                 echo "Running Selenium test cases..."
                 sh """
+                    mkdir -p \$(pwd)/reports
                     docker run --rm \
                         -e BASE_URL=${BASE_URL} \
                         -v \$(pwd)/reports:/app/reports \
                         ${IMAGE_NAME} \
-                        pytest test_shopease.py \
+                        pytest tests/test_shopease.py \
                             --html=reports/report.html \
                             --self-contained-html \
                             -v
@@ -43,9 +44,8 @@ pipeline {
             }
             post {
                 always {
-                    // Archive the HTML report as a Jenkins artifact
                     publishHTML([
-                        allowMissing: false,
+                        allowMissing: true,
                         alwaysLinkToLastBuild: true,
                         keepAll: true,
                         reportDir: 'reports',
