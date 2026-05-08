@@ -76,14 +76,38 @@ pipeline {
     post {
         always {
             script {
+                // Get pusher email — try multiple sources in order
                 def pusherEmail = ''
+
+                // Source 1: GitHub webhook payload (most accurate - contains pusher info)
                 try {
-                    pusherEmail = env.GIT_AUTHOR_EMAIL ?: sh(
-                        script: "git log -1 --format='%ae'",
-                        returnStdout: true
-                    ).trim()
+                    def payload = env.payload
+                    if (payload) {
+                        def json = new groovy.json.JsonSlurper().parseText(payload)
+                        pusherEmail = json?.pusher?.email ?: ''
+                        echo "Got pusher email from webhook payload: ${pusherEmail}"
+                    }
                 } catch (Exception e) {
+                    echo "Could not parse webhook payload: ${e.message}"
+                }
+
+                // Source 2: git log of the app repo (who last pushed)
+                if (!pusherEmail) {
+                    try {
+                        pusherEmail = sh(
+                            script: "cd ${APP_DIR} && git log -1 --format='%ae'",
+                            returnStdout: true
+                        ).trim()
+                        echo "Got pusher email from git log: ${pusherEmail}"
+                    } catch (Exception e) {
+                        echo "Could not get git log email: ${e.message}"
+                    }
+                }
+
+                // Source 3: fallback to professor email
+                if (!pusherEmail) {
                     pusherEmail = 'qasimalik@gmail.com'
+                    echo "Using fallback email: ${pusherEmail}"
                 }
 
                 def buildStatus = currentBuild.currentResult ?: 'UNKNOWN'
@@ -106,22 +130,26 @@ pipeline {
             <td style="padding: 8px;"><strong>${buildStatus}</strong></td>
         </tr>
         <tr>
+            <td style="padding: 8px; font-weight: bold;">Triggered by:</td>
+            <td style="padding: 8px;">${pusherEmail}</td>
+        </tr>
+        <tr style="background:#f2f2f2;">
             <td style="padding: 8px; font-weight: bold;">Branch:</td>
             <td style="padding: 8px;">${GIT_BRANCH ?: 'main'}</td>
         </tr>
-        <tr style="background:#f2f2f2;">
+        <tr>
             <td style="padding: 8px; font-weight: bold;">Commit:</td>
             <td style="padding: 8px;">${GIT_COMMIT?.take(8) ?: 'N/A'}</td>
         </tr>
-        <tr>
+        <tr style="background:#f2f2f2;">
             <td style="padding: 8px; font-weight: bold;">Duration:</td>
             <td style="padding: 8px;">${currentBuild.durationString}</td>
         </tr>
-        <tr style="background:#f2f2f2;">
+        <tr>
             <td style="padding: 8px; font-weight: bold;">Jenkins URL:</td>
             <td style="padding: 8px;"><a href="${BUILD_URL}">${BUILD_URL}</a></td>
         </tr>
-        <tr>
+        <tr style="background:#f2f2f2;">
             <td style="padding: 8px; font-weight: bold;">Deployment URL:</td>
             <td style="padding: 8px;"><a href="http://13.201.46.240:3000">http://13.201.46.240:3000</a></td>
         </tr>
